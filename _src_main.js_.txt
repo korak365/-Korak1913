@@ -1,0 +1,76 @@
+// Apify SDK - toolkit for building Apify Actors (Read more at https://docs.apify.com/sdk/js/)
+import { Actor } from 'apify';
+// Crawlee - web scraping and browser automation library (Read more at https://crawlee.dev)
+import { CheerioCrawler, Dataset } from 'crawlee';
+
+// The init() call configures the Actor for its environment. It's recommended to start every Actor with an init()
+await Actor.init();
+
+// Structure of input is defined in input_schema.json
+const { startUrls = ['https://www.amazon.com/s?k=electronics'], maxRequestsPerCrawl = 100, extractCouponDetails = true } = (await Actor.getInput()) ?? {};
+
+// Proxy configuration to rotate IP addresses and prevent blocking (https://docs.apify.com/platform/proxy)
+const proxyConfiguration = await Actor.createProxyConfiguration();
+
+const crawler = new CheerioCrawler({
+    proxyConfiguration,
+    maxRequestsPerCrawl,
+    async requestHandler({ enqueueLinks, request, $, log }) {
+        log.info('Processing URL:', { url: request.loadedUrl });
+
+        // Enqueue links to other Amazon product pages
+        await enqueueLinks({
+            selector: 'a[data-component-type="s-search-result"]',
+        });
+
+        // Extract product information and hidden coupons
+        const products = [];
+        $('[data-component-type="s-search-result"]').each((index, element) => {
+            const $product = $(element);
+
+            // Extract product title
+            const productTitle = $product.find('h2 a span').text().trim();
+            const productUrl = $product.find('h2 a').attr('href');
+
+            // Look for coupon information (often in smaller text or badges)
+            const couponText = $product.find('[aria-label*="coupon"], [aria-label*="discount"], .a-color-base-spun').text().trim();
+            const discountBadge = $product.find('.a-badge-label').text().trim();
+
+            // Extract price information
+            const priceText = $product.find('.a-price-whole').text().trim();
+
+            if (productTitle && productUrl) {
+                products.push({
+                    productTitle,
+                    productUrl: `https://www.amazon.com${productUrl}`,
+                    couponCode: couponText || discountBadge || 'No visible coupon',
+                    discountPercentage: extractCouponDetails ? extractDiscountPercentage(discountBadge) : null,
+                    price: priceText,
+                    scrapedAt: new Date().toISOString(),
+                });
+            }
+        });
+
+        // Save products to Dataset
+        if (products.length > 0) {
+            await Dataset.pushData(products);
+            log.info(`Extracted ${products.length} products with coupon information`);
+        }
+    },
+
+    // Error handling
+    errorHandler: async ({ request, error, log }) => {
+        log.error(`Error processing ${request.url}: ${error.message}`);
+    },
+});
+
+// Helper function to extract discount percentage
+function extractDiscountPercentage(text) {
+    const match = text.match(/(\d+)%/);
+    return match ? parseInt(match[1]) : null;
+}
+
+await crawler.run(startUrls);
+
+// Gracefully exit the Actor process. It's recommended to quit all Actors with an exit()
+await Actor.exit();

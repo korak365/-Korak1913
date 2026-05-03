@@ -1,0 +1,31 @@
+{
+    "title": "Input schema of the Amazon Hidden Coupons Scraper",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "startUrls": {
+            "title": "Start URLs",
+            "type": "array",
+            "description": "Amazon product URLs or search pages to scan for hidden coupons.",
+            "editor": "requestListSources",
+            "prefill": [
+                {
+                    "url": "https://www.amazon.com/s?k=electronics"
+                }
+            ]
+        },
+        "maxRequestsPerCrawl": {
+            "title": "Max Requests per Crawl",
+            "type": "integer",
+            "description": "Maximum number of requests that can be made by this crawler.",
+            "default": 100
+        },
+        "extractCouponDetails": {
+            "title": "Extract Coupon Details",
+            "type": "boolean",
+            "description": "Whether to extract detailed coupon information (discount percentage, expiration date, etc.).",
+            "default": true
+        }
+    },
+    "required": []
+}
